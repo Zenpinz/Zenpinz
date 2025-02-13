@@ -1,0 +1,65 @@
+import pandas as pd
+
+# Sample dataframe
+def create_sample_data():
+    data = {
+        'fdr_name': ['FDR1', 'FDR1', 'FDR2', 'FDR2', 'FDR3'],
+        'transformer_id': ['T1', 'T1', 'T2', 'T2', 'T3'],
+        'meter_id': ['M1', 'M2', 'M1', 'M3', 'M4'],
+        'aggr_kwh': [100, 200, 150, 250, 300],
+        'fdr_kwh': [500, 500, 600, 600, 700]
+    }
+    return pd.DataFrame(data)
+
+# Compute unique meter count per feeder
+def compute_feeder_meter_counts(df):
+    df_unique_count = df.groupby('fdr_name')['meter_id'].nunique().reset_index()
+    df_unique_count.columns = ['fdr_name', 'unique_meter_count']
+    
+    total_unique_meters = df['meter_id'].nunique()
+    df_unique_count['meter_ratio'] = df_unique_count['unique_meter_count'] / total_unique_meters
+    return df_unique_count
+
+# Compute mean feeder kWh and merge with meter count
+def compute_feeder_power(df, df_unique_count):
+    df_fdr_mean = df.groupby('fdr_name')['fdr_kwh'].mean().reset_index()
+    df_fdr_mean.columns = ['fdr_name', 'fdr_kwh_mean']
+
+    df_feeder = pd.merge(df_unique_count, df_fdr_mean, on='fdr_name')
+    df_feeder['power_fdr'] = df_feeder['fdr_kwh_mean'] * df_feeder['meter_ratio']
+    
+    return df_feeder
+
+# Compute transformer meter ratios
+def compute_transformer_meter_ratios(df):
+    df_transformer_unique = df.groupby(['fdr_name', 'transformer_id'])['meter_id'].nunique().reset_index()
+    df_transformer_unique.columns = ['fdr_name', 'transformer_id', 'unique_meter_count']
+
+    total_unique_meters_transformer = df_transformer_unique.groupby('transformer_id')['unique_meter_count'].sum().reset_index()
+    total_unique_meters_transformer.columns = ['transformer_id', 'total_meter_count']
+
+    df_transformer_ratio = pd.merge(df_transformer_unique, total_unique_meters_transformer, on='transformer_id')
+    df_transformer_ratio['meter_ratio_transformer'] = df_transformer_ratio['unique_meter_count'] / df_transformer_ratio['total_meter_count']
+    
+    return df_transformer_ratio
+
+# Compute power distribution per transformer
+def compute_transformer_power(df_transformer_ratio, df_feeder):
+    df_final = pd.merge(df_transformer_ratio, df_feeder[['fdr_name', 'power_fdr']], on='fdr_name')
+    df_final['power_trans'] = df_final['meter_ratio_transformer'] * df_final['power_fdr']
+    return df_final
+
+# Main function to execute steps
+def main():
+    df = create_sample_data()
+    
+    df_feeder_meters = compute_feeder_meter_counts(df)
+    df_feeder_power = compute_feeder_power(df, df_feeder_meters)
+    df_transformer_ratios = compute_transformer_meter_ratios(df)
+    df_final = compute_transformer_power(df_transformer_ratios, df_feeder_power)
+    
+    print(df_final)
+
+# Run the script
+if __name__ == "__main__":
+    main()
